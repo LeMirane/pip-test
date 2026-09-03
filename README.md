@@ -4,6 +4,35 @@
 
 Всё в одном файле — `index.html`. Никакой сборки, никаких зависимостей.
 
+## Обход: вебвью игры
+
+Внутри Mini App PiP не включить. Но у бота есть **четвёртый** вебвью, про который обычно забывают — вебвью HTML5-игр, `sendGame`.
+
+[`submodules/GameUI/Sources/GameControllerNode.swift:52-73`](https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/GameUI/Sources/GameControllerNode.swift#L52):
+
+```swift
+configuration.allowsInlineMediaPlayback = true
+configuration.mediaTypesRequiringUserActionForPlayback = []
+let webView = WKWebView(frame: CGRect(), configuration: configuration)
+```
+
+Чего здесь нет:
+
+* `allowsPictureInPictureMediaPlayback` **не устанавливается** → остаётся дефолтный `true`;
+* инъекции `videoSource` с `MutationObserver` **нет вообще** — грепом по файлу ноль совпадений, значит `playsinline` никто не навязывает.
+
+То есть открыты **оба** пути: и JS-API (`webkitSetPresentationMode`), и нативный полноэкранный плеер с системной кнопкой PiP. Вебвью грузит произвольный URL (`webView.load(URLRequest(url: parsedUrl))`), запускается кнопкой из сообщения бота, и получает тот же мост `TelegramWebviewProxy`.
+
+Формально это не Mini App, но по сути — то же самое: твоя HTTPS-страница, свой плеер, запуск из бота, и всё внутри Telegram.
+
+### Как включить
+
+1. @BotFather → `/newgame` → выбрать бота → название, описание, картинка 640×360 → короткое имя, например `pip`.
+2. Бот шлёт `sendGame(chat_id, game_short_name="pip")`.
+3. Пользователь жмёт **Play** → прилетает `callback_query` с полем `game_short_name` → бот отвечает `answerCallbackQuery(callback_query_id, url="https://…")`.
+
+URL BotFather не спрашивает — его отдаёт бот в шаге 3, то есть менять адрес можно на лету, без перерегистрации. В `bot.py` это кнопка 4.
+
 ## Ответ на гипотезу (из исходников Telegram-iOS)
 
 **Нет — из Telegram Mini App на iPhone PiP не включить. Он выключен намеренно, на нативном уровне.**
@@ -63,6 +92,7 @@ video.webkitSupportsPresentationMode('picture-in-picture')
 | 1 | inline-кнопка с `url` | встроенный браузер Telegram | **работает** |
 | 2 | inline-кнопка с `web_app`, menu button, `t.me/bot/app` | вебвью Mini App | **выключен намеренно** |
 | 3 | `sendVideo` | родной плеер Telegram | **работает, нативный** |
+| 4 | `sendGame` | вебвью игры | **работает — свой плеер** |
 
 Путь 3 — самый крепкий: это не веб вообще. Telegram проигрывает файл своим плеером через `AVPictureInPictureController` (`submodules/GalleryUI/Sources/Items/UniversalVideoGalleryItem.swift`), у приложения в Info.plist есть `UIBackgroundModes: audio`, поэтому окошко переживает сворачивание Telegram и висит поверх других приложений. Ограничение: бот отдаёт по URL файлы до 20 МБ, загрузкой напрямую — до 50 МБ.
 

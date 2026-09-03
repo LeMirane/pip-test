@@ -210,28 +210,40 @@ function detectTgVideoHook(done){
 function verdict(){
   var el = document.getElementById('verdict');
   var btn = document.getElementById('bOpenBrowser');
+  var hasProxy = !!window.TelegramWebviewProxy;
   var html, cls;
 
+  // Матрица различения (проверено по исходникам Telegram-iOS):
+  //   Mini App          — есть tgWebAppPlatform, есть инъекция playsinline
+  //   Game (sendGame)   — есть TelegramWebviewProxy, инъекции НЕТ
+  //   встроенный браузер— инъекция есть, tgWebAppPlatform нет
+  //   Safari            — ни того, ни другого
   if (inTelegram) {
     cls = 'bad';
-    html = '<b>Telegram Mini App' + (tg ? ' · ' + tg.platform : '') + '</b>' +
-      'В Mini App на iOS PiP выключен на нативном уровне: Telegram ставит ' +
-      '<code>allowsPictureInPictureMediaPlayback = false</code> в конфигурации WKWebView. ' +
-      'Из JavaScript это не обходится. Ожидаемый результат теста — <b style="display:inline">не работает</b>.';
+    html = '<b>Telegram Mini App' + (tg ? ' · ' + tg.platform : '') + ' — тупик</b>' +
+      'Telegram ставит <code>allowsPictureInPictureMediaPlayback = false</code> в конфигурации ' +
+      'этого вебвью и вдобавок навязывает <code>playsinline</code> каждому видео. ' +
+      'Оба пути к PiP закрыты, из JS это не обходится. ' +
+      '<b style="display:inline">Жми кнопку ниже — это тот же URL, но в вебвью игры, где PiP включён.</b>';
     if (tg && tg.openLink) btn.style.display = '';
+  } else if (tgHook === false && hasProxy) {
+    cls = 'ok';
+    html = '<b>Вебвью игры Telegram (sendGame) — здесь должно работать</b>' +
+      '<code>GameControllerNode.swift</code> не трогает флаг PiP, поэтому он остаётся ' +
+      'дефолтным <code>true</code>, и инъекции <code>playsinline</code> здесь тоже нет. ' +
+      'Оба пути открыты: и JS-API, и нативная кнопка в полноэкранном плеере.';
   } else if (tgHook === true) {
     cls = 'ok';
     html = '<b>Встроенный браузер Telegram</b>' +
-      'Здесь Telegram флаг PiP не трогает — он остаётся в значении по умолчанию ' +
-      '<code>true</code>. PiP тут должен работать. Если работает — разница между ' +
-      'браузером и Mini App доказана.';
+      'Флаг PiP тут не переопределён и остаётся дефолтным <code>true</code>. ' +
+      'PiP должен работать.';
   } else if (tgHook === false) {
     cls = 'ok';
     html = '<b>Обычный браузер (не Telegram)</b>' +
-      'Контрольный замер. Здесь PiP должен работать штатно — с этим и сравнивай.';
+      'Контрольный замер — здесь PiP работает штатно.';
   } else {
     cls = '';
-    html = '<b>Контекст не определён</b>Проверка инъекции Telegram: ' + String(tgHook);
+    html = '<b>Определяю контекст…</b>проверка инъекции Telegram: ' + String(tgHook);
   }
   el.className = 'verdict ' + cls;
   el.innerHTML = html;
@@ -319,6 +331,7 @@ function caps(){
     row('ManagedMediaSource', yn(typeof window.ManagedMediaSource !== 'undefined')),
     row('в iframe', yn(window.self !== window.top)),
     row('Telegram навязывает playsinline', yn(tgHook === null ? 'проверяю…' : tgHook)),
+    row('window.TelegramWebviewProxy', yn(!!window.TelegramWebviewProxy)),
     row('videoWidth × videoHeight', yn(v.videoWidth + '×' + v.videoHeight)),
     row('readyState', yn(v.readyState)),
     row('paused / muted', yn(v.paused + ' / ' + v.muted))

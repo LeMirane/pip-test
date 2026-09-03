@@ -23,6 +23,7 @@ PAGE_URL = os.environ.get("PAGE_URL", "https://lemirane.github.io/pip-test/").st
 VIDEO_URL = os.environ.get(
     "VIDEO_URL", "https://media.w3.org/2010/05/sintel/trailer.mp4"
 )  # 4.1 МБ — влезает в лимит Telegram на отправку по URL (20 МБ)
+GAME_SHORT_NAME = os.environ.get("GAME_SHORT_NAME", "pip").strip()
 
 if not TOKEN:
     sys.exit(
@@ -57,6 +58,7 @@ MENU = {
         [{"text": "1 · Ссылкой → встроенный браузер", "url": PAGE_URL + "?ctx=browser"}],
         [{"text": "2 · Mini App → web_app", "web_app": {"url": PAGE_URL + "?ctx=miniapp"}}],
         [{"text": "3 · Видео файлом → родной плеер", "callback_data": "video"}],
+        [{"text": "4 · Как игру → вебвью с включённым PiP", "callback_data": "game"}],
     ]
 }
 
@@ -72,6 +74,9 @@ INTRO = (
     "<b>3 · Видео файлом</b> — вообще без веба. Родной плеер Telegram, настоящий "
     "системный PiP через <code>AVPictureInPictureController</code>. "
     "<b>Работает и переживает сворачивание приложения.</b>\n\n"
+    "<b>4 · Как игру</b> — та же страница, но открытая через <code>sendGame</code>. "
+    "Вебвью игр (<code>GameControllerNode.swift</code>) флаг PiP не переопределяет и "
+    "<code>playsinline</code> не навязывает. <b>Свой плеер + рабочий PiP, и всё ещё через бота.</b>\n\n"
     "На странице жми <b>1. Запустить видео</b>, потом <b>2a</b> и <b>2b</b>."
 )
 
@@ -93,8 +98,32 @@ def handle_message(msg):
 
 
 def handle_callback(cq):
-    api("answerCallbackQuery", callback_query_id=cq["id"], text="Отправляю видео…")
+    # Нажали Play на сообщении-игре: Telegram ждёт, что бот отдаст URL прямо в ответе.
+    if cq.get("game_short_name"):
+        api("answerCallbackQuery", callback_query_id=cq["id"], url=PAGE_URL + "?ctx=game")
+        return
+
+    data = cq.get("data") or ""
     chat_id = cq["message"]["chat"]["id"]
+
+    if data == "game":
+        api("answerCallbackQuery", callback_query_id=cq["id"], text="Отправляю игру…")
+        r = api("sendGame", chat_id=chat_id, game_short_name=GAME_SHORT_NAME)
+        if not r.get("ok"):
+            api(
+                "sendMessage",
+                chat_id=chat_id,
+                parse_mode="HTML",
+                text=(
+                    "Игра <code>%s</code> не зарегистрирована.\n\n"
+                    "@BotFather → <code>/newgame</code> → выбрать этого бота → "
+                    "название, описание, картинку 640×360 → короткое имя <code>%s</code>.\n\n"
+                    "URL игры BotFather не спросит — его отдаёт сам бот в ответе на нажатие Play."
+                ) % (GAME_SHORT_NAME, GAME_SHORT_NAME),
+            )
+        return
+
+    api("answerCallbackQuery", callback_query_id=cq["id"], text="Отправляю видео…")
     api(
         "sendVideo",
         chat_id=chat_id,
