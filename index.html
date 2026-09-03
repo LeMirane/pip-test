@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PiP Test — Telegram Mini App</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg: var(--tg-theme-bg-color, #17212b);
+    --sec: var(--tg-theme-secondary-bg-color, #232e3c);
+    --fg: var(--tg-theme-text-color, #f5f5f5);
+    --hint: var(--tg-theme-hint-color, #8b9aa8);
+    --link: var(--tg-theme-link-color, #6ab3f3);
+    --btn: var(--tg-theme-button-color, #3390ec);
+    --btn-fg: var(--tg-theme-button-text-color, #ffffff);
+    --ok:#3ddc84; --bad:#ff6b6b; --warn:#ffc857;
+    --line: color-mix(in srgb, var(--hint) 25%, transparent);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+    padding:12px 12px calc(24px + env(safe-area-inset-bottom));
+    -webkit-text-size-adjust:100%;
+  }
+  h1{font-size:17px;margin:2px 0 2px;letter-spacing:-.01em}
+  .sub{color:var(--hint);font-size:12px;margin:0 0 14px}
+  .card{background:var(--sec);border-radius:12px;padding:12px;margin-bottom:12px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--hint);margin:0 0 10px;font-weight:600}
+  video{width:100%;border-radius:10px;background:#000;display:block;aspect-ratio:16/9}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  button{
+    appearance:none;border:0;border-radius:10px;padding:11px 10px;
+    background:var(--btn);color:var(--btn-fg);font:600 13px/1.2 inherit;
+    cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:center;
+  }
+  button:active{opacity:.7}
+  button.ghost{background:transparent;color:var(--link);box-shadow:inset 0 0 0 1px var(--line)}
+  button.wide{grid-column:1/-1}
+  .seg{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+  .seg button{flex:1;padding:8px 6px;font-size:12px;background:transparent;color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
+  .seg button[aria-pressed="true"]{background:var(--btn);color:var(--btn-fg);box-shadow:none}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  td{padding:5px 0;vertical-align:top;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:0}
+  td:first-child{color:var(--hint);padding-right:10px;word-break:break-word}
+  td:last-child{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+  .y{color:var(--ok)} .n{color:var(--bad)} .u{color:var(--warn)}
+  #log{
+    background:#0c1218;color:#cfe3f5;border-radius:10px;padding:10px;
+    font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+    max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+  }
+  #log .e{color:#ff8b8b} #log .s{color:#7ee2a8}
+  #log .ts{color:#5d7a92}
+  .note{color:var(--hint);font-size:11.5px;margin:8px 0 0}
+  input[type=url]{
+    width:100%;padding:9px 10px;border-radius:9px;border:1px solid var(--line);
+    background:var(--bg);color:var(--fg);font:12px/1.3 inherit;margin-bottom:8px
+  }
+  textarea{width:100%;height:110px;border-radius:9px;border:1px solid var(--line);
+    background:var(--bg);color:var(--fg);font:11px/1.4 ui-monospace,Menlo,monospace;padding:8px}
+  ol{margin:6px 0 0;padding-left:18px;color:var(--hint);font-size:12px}
+  ol li{margin-bottom:5px}
+  ol b{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<h1>Picture-in-Picture — проверка</h1>
+<p class="sub">Тест: можно ли из Telegram Mini App включить PiP на iPhone.</p>
+
+<div class="card">
+  <div class="seg" id="srcSeg"></div>
+  <video id="v" playsinline webkit-playsinline controls preload="metadata"
+         x-webkit-airplay="allow"></video>
+  <input type="url" id="customUrl" placeholder="…или свой URL (mp4 / m3u8) и Enter">
+</div>
+
+<div class="card">
+  <h2>Действия — жми по порядку</h2>
+  <div class="grid">
+    <button id="bPlay" class="wide">▶︎ 1. Запустить видео</button>
+    <button id="bPipStd">2a. PiP · стандарт</button>
+    <button id="bPipWk">2b. PiP · WebKit</button>
+    <button id="bFsWk">3a. Fullscreen · WebKit</button>
+    <button id="bFsStd">3b. Fullscreen · станд.</button>
+    <button id="bTgFs" class="ghost">3c. Telegram fullscreen</button>
+    <button id="bExit" class="ghost">Выйти из PiP</button>
+    <button id="bAuto" class="ghost wide" aria-pressed="false">Авто-PiP при сворачивании: ВЫКЛ</button>
+  </div>
+  <ol>
+    <li><b>1</b> — PiP на iOS требует, чтобы видео уже играло.</li>
+    <li><b>2a/2b</b> — прямой вызов API. Если сработало — гипотеза подтверждена.</li>
+    <li><b>3a</b> — если прямой вызов не даёт PiP: войди в полноэкранный режим, там появится <b>нативная кнопка PiP</b> (прямоугольник со стрелкой). Это второй путь.</li>
+    <li><b>3a → свернуть Telegram</b> — если в iOS включено «Автозапуск Картинки в картинке», видео может само уйти в PiP. Третий путь.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>Поддержка API</h2>
+  <table id="caps"></table>
+  <button class="ghost wide" id="bRecheck" style="margin-top:10px">Перепроверить</button>
+</div>
+
+<div class="card">
+  <h2>Окружение</h2>
+  <table id="env"></table>
+</div>
+
+<div class="card">
+  <h2>Лог событий</h2>
+  <div id="log"></div>
+  <div class="grid" style="margin-top:10px">
+    <button class="ghost" id="bCopy">Скопировать отчёт</button>
+    <button class="ghost" id="bClear">Очистить</button>
+  </div>
+  <textarea id="dump" readonly hidden></textarea>
+  <p class="note">Лог сохраняется в localStorage — переживает перезагрузку вебвью после сворачивания Telegram.</p>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+var v = document.getElementById('v');
+var logEl = document.getElementById('log');
+var LOGKEY = 'pip_test_log_v1';
+var lines = [];
+
+try { lines = JSON.parse(localStorage.getItem(LOGKEY) || '[]'); } catch(e){ lines = []; }
+
+function stamp(){
+  var d = new Date();
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'
+       + String(d.getSeconds()).padStart(2,'0')+'.'+String(d.getMilliseconds()).padStart(3,'0');
+}
+function log(msg, kind){
+  lines.push({t: stamp(), m: String(msg), k: kind || ''});
+  if (lines.length > 300) lines = lines.slice(-300);
+  try { localStorage.setItem(LOGKEY, JSON.stringify(lines)); } catch(e){}
+  render();
+}
+function render(){
+  logEl.innerHTML = lines.map(function(l){
+    var cls = l.k === 'err' ? 'e' : (l.k === 'ok' ? 's' : '');
+    return '<span class="ts">'+l.t+'</span> <span class="'+cls+'">'+esc(l.m)+'</span>';
+  }).join('\n');
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function esc(s){ return s.replace(/[&<>]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]; }); }
+render();
+log('--- сессия открыта ---');
+
+/* ---------- Telegram ---------- */
+var tgApi = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+// SDK всегда создаёт Telegram.WebApp; настоящий Mini App отличаем по platform/initData
+var inTelegram = !!tgApi && tgApi.platform !== 'unknown' && tgApi.platform !== undefined;
+var tg = tgApi;
+if (inTelegram) {
+  try { tg.ready(); } catch(e){}
+  try { tg.expand(); } catch(e){}
+  try { if (tg.disableVerticalSwipes) tg.disableVerticalSwipes(); } catch(e){}
+  try { if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color'); } catch(e){}
+  log('✓ настоящий Telegram Mini App: platform=' + tg.platform + ' version=' + tg.version, 'ok');
+} else {
+  log('Telegram.WebApp НЕ обнаружен — страница открыта вне Telegram.', 'err');
+}
+
+/* ---------- источники ---------- */
+var SOURCES = [
+  { name:'MP4',        url:'https://vjs.zencdn.net/v/oceans.mp4' },
+  { name:'MP4 длинный',url:'https://media.w3.org/2010/05/sintel/trailer.mp4' },
+  { name:'HLS',        url:'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' },
+  { name:'HLS Apple',  url:'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8' }
+];
+var seg = document.getElementById('srcSeg');
+SOURCES.forEach(function(s, i){
+  var b = document.createElement('button');
+  b.textContent = s.name;
+  b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+  b.onclick = function(){ setSource(s, b); };
+  seg.appendChild(b);
+});
+function setSource(s, btn){
+  Array.prototype.forEach.call(seg.children, function(c){ c.setAttribute('aria-pressed','false'); });
+  if (btn) btn.setAttribute('aria-pressed','true');
+  v.src = s.url;
+  v.load();
+  log('источник → ' + s.name + '  ' + s.url);
+  setTimeout(caps, 400);
+}
+setSource(SOURCES[0], seg.children[0]);
+
+document.getElementById('customUrl').addEventListener('keydown', function(e){
+  if (e.key === 'Enter' && this.value) {
+    Array.prototype.forEach.call(seg.children, function(c){ c.setAttribute('aria-pressed','false'); });
+    v.src = this.value; v.load();
+    log('источник → custom  ' + this.value);
+    this.blur();
+  }
+});
+
+/* ---------- возможности ---------- */
+function yn(x){
+  if (x === true)  return '<span class="y">да</span>';
+  if (x === false) return '<span class="n">нет</span>';
+  return '<span class="u">' + esc(String(x)) + '</span>';
+}
+function row(k, val){ return '<tr><td>' + k + '</td><td>' + val + '</td></tr>'; }
+
+function caps(){
+  var wkSupports = 'n/a';
+  try {
+    if (typeof v.webkitSupportsPresentationMode === 'function') {
+      wkSupports = v.webkitSupportsPresentationMode('picture-in-picture');
+    } else { wkSupports = false; }
+  } catch(e){ wkSupports = 'throw: ' + e.name; }
+
+  var rows = [
+    row('document.pictureInPictureEnabled', yn(document.pictureInPictureEnabled === true)),
+    row('video.requestPictureInPicture', yn(typeof v.requestPictureInPicture === 'function')),
+    row('video.disablePictureInPicture', yn(v.disablePictureInPicture === true)),
+    row('document.pictureInPictureElement', yn(document.pictureInPictureElement ? 'есть' : 'нет')),
+    row('webkitSupportsPresentationMode(pip)', yn(wkSupports)),
+    row('webkitSetPresentationMode', yn(typeof v.webkitSetPresentationMode === 'function')),
+    row('video.webkitPresentationMode', yn(v.webkitPresentationMode || 'undefined')),
+    row('video.webkitEnterFullscreen', yn(typeof v.webkitEnterFullscreen === 'function')),
+    row('document.fullscreenEnabled', yn(document.fullscreenEnabled === true)),
+    row('webkitSupportsFullscreen', yn(v.webkitSupportsFullscreen === true)),
+    row('navigator.mediaSession', yn(!!navigator.mediaSession)),
+    row('MediaSource (MSE)', yn(typeof window.MediaSource !== 'undefined')),
+    row('ManagedMediaSource', yn(typeof window.ManagedMediaSource !== 'undefined')),
+    row('в iframe', yn(window.self !== window.top)),
+    row('videoWidth × videoHeight', yn(v.videoWidth + '×' + v.videoHeight)),
+    row('readyState', yn(v.readyState)),
+    row('paused / muted', yn(v.paused + ' / ' + v.muted))
+  ];
+  document.getElementById('caps').innerHTML = rows.join('');
+}
+
+function env(){
+  var rows = [
+    row('внутри Telegram', yn(inTelegram)),
+    row('tg.platform', yn(tg ? tg.platform : '—')),
+    row('tg.version', yn(tg ? tg.version : '—')),
+    row('tg.isExpanded', yn(tg ? String(tg.isExpanded) : '—')),
+    row('tg.isFullscreen', yn(tg && 'isFullscreen' in tg ? String(tg.isFullscreen) : 'n/a')),
+    row('viewportHeight', yn(tg ? tg.viewportHeight : window.innerHeight)),
+    row('screen', yn(screen.width + '×' + screen.height + ' @' + (window.devicePixelRatio||1) + 'x')),
+    row('standalone', yn(navigator.standalone === true)),
+    row('maxTouchPoints', yn(navigator.maxTouchPoints)),
+    row('userAgent', '<span style="font-size:10.5px">' + esc(navigator.userAgent) + '</span>')
+  ];
+  document.getElementById('env').innerHTML = rows.join('');
+}
+caps(); env();
+document.getElementById('bRecheck').onclick = function(){ caps(); env(); log('перепроверено'); };
+
+/* ---------- действия ---------- */
+function fail(where, e){
+  log('✗ ' + where + ' → ' + (e && e.name ? e.name : 'Error') + ': ' + (e && e.message ? e.message : e), 'err');
+}
+
+document.getElementById('bPlay').onclick = function(){
+  try { if (navigator.mediaSession) navigator.mediaSession.metadata = new MediaMetadata({title:'PiP test', artist:'Telegram Mini App'}); } catch(e){}
+  var p = v.play();
+  if (p && p.then) p.then(function(){ log('✓ play() ok', 'ok'); caps(); })
+                    .catch(function(e){ fail('play()', e); });
+  else log('play() вызван (без промиса)');
+};
+
+document.getElementById('bPipStd').onclick = function(){
+  if (typeof v.requestPictureInPicture !== 'function') {
+    log('✗ requestPictureInPicture отсутствует в этом вебвью', 'err'); return;
+  }
+  try {
+    v.requestPictureInPicture()
+      .then(function(w){ log('✓✓ PiP (стандарт) ОТКРЫТ ' + (w ? w.width + '×' + w.height : ''), 'ok'); caps(); })
+      .catch(function(e){ fail('requestPictureInPicture()', e); });
+  } catch(e){ fail('requestPictureInPicture() sync', e); }
+};
+
+document.getElementById('bPipWk').onclick = function(){
+  if (typeof v.webkitSetPresentationMode !== 'function') {
+    log('✗ webkitSetPresentationMode отсутствует', 'err'); return;
+  }
+  try {
+    var sup = typeof v.webkitSupportsPresentationMode === 'function'
+      ? v.webkitSupportsPresentationMode('picture-in-picture') : 'unknown';
+    log('webkitSupportsPresentationMode("picture-in-picture") = ' + sup);
+    v.webkitSetPresentationMode('picture-in-picture');
+    setTimeout(function(){
+      log((v.webkitPresentationMode === 'picture-in-picture' ? '✓✓ PiP (WebKit) ОТКРЫТ' : '✗ режим остался: ' + v.webkitPresentationMode),
+          v.webkitPresentationMode === 'picture-in-picture' ? 'ok' : 'err');
+      caps();
+    }, 500);
+  } catch(e){ fail('webkitSetPresentationMode()', e); }
+};
+
+document.getElementById('bFsWk').onclick = function(){
+  if (typeof v.webkitEnterFullscreen !== 'function') { log('✗ webkitEnterFullscreen отсутствует', 'err'); return; }
+  try { v.webkitEnterFullscreen(); log('webkitEnterFullscreen() вызван — ищи кнопку PiP в плеере'); }
+  catch(e){ fail('webkitEnterFullscreen()', e); }
+};
+
+document.getElementById('bFsStd').onclick = function(){
+  var el = v.requestFullscreen ? v : null;
+  try {
+    if (el && el.requestFullscreen) el.requestFullscreen().then(function(){ log('✓ fullscreen ok','ok'); }).catch(function(e){ fail('requestFullscreen()', e); });
+    else if (v.webkitRequestFullscreen) { v.webkitRequestFullscreen(); log('webkitRequestFullscreen() вызван'); }
+    else log('✗ Fullscreen API недоступен', 'err');
+  } catch(e){ fail('requestFullscreen()', e); }
+};
+
+document.getElementById('bTgFs').onclick = function(){
+  if (!tg) { log('✗ нет Telegram.WebApp', 'err'); return; }
+  try {
+    if (tg.requestFullscreen) { tg.requestFullscreen(); log('Telegram.WebApp.requestFullscreen() вызван'); }
+    else log('✗ requestFullscreen нет в Bot API ' + tg.version + ' (нужен 8.0+)', 'err');
+  } catch(e){ fail('tg.requestFullscreen()', e); }
+};
+
+document.getElementById('bExit').onclick = function(){
+  try {
+    if (document.exitPictureInPicture) document.exitPictureInPicture().then(function(){ log('вышли из PiP'); });
+    else if (v.webkitSetPresentationMode) { v.webkitSetPresentationMode('inline'); log('webkitSetPresentationMode("inline")'); }
+  } catch(e){ fail('exit', e); }
+};
+
+var autoPip = false;
+var bAuto = document.getElementById('bAuto');
+bAuto.onclick = function(){
+  autoPip = !autoPip;
+  bAuto.setAttribute('aria-pressed', String(autoPip));
+  bAuto.textContent = 'Авто-PiP при сворачивании: ' + (autoPip ? 'ВКЛ' : 'ВЫКЛ');
+  log('авто-PiP ' + (autoPip ? 'включён' : 'выключен'));
+};
+
+/* ---------- события ---------- */
+['enterpictureinpicture','leavepictureinpicture'].forEach(function(ev){
+  v.addEventListener(ev, function(){ log('event: ' + ev, ev === 'enterpictureinpicture' ? 'ok' : ''); caps(); });
+});
+v.addEventListener('webkitpresentationmodechanged', function(){
+  log('event: webkitpresentationmodechanged → ' + v.webkitPresentationMode,
+      v.webkitPresentationMode === 'picture-in-picture' ? 'ok' : '');
+  caps();
+});
+['webkitbeginfullscreen','webkitendfullscreen','play','pause','loadedmetadata','error','stalled'].forEach(function(ev){
+  v.addEventListener(ev, function(){
+    if (ev === 'error') log('event: error → ' + (v.error ? 'code ' + v.error.code + ' ' + v.error.message : '?'), 'err');
+    else log('event: ' + ev);
+  });
+});
+document.addEventListener('visibilitychange', function(){
+  log('visibility → ' + document.visibilityState + '  | pipEl=' + (document.pictureInPictureElement ? 'yes' : 'no')
+      + '  | wkMode=' + v.webkitPresentationMode);
+  if (autoPip && document.visibilityState === 'hidden') {
+    try {
+      if (v.requestPictureInPicture) v.requestPictureInPicture().then(function(){ log('✓ авто-PiP сработал','ok'); }).catch(function(e){ fail('авто-PiP', e); });
+      else if (v.webkitSetPresentationMode) v.webkitSetPresentationMode('picture-in-picture');
+    } catch(e){ fail('авто-PiP', e); }
+  }
+});
+window.addEventListener('pageshow', function(e){ log('pageshow (persisted=' + e.persisted + ')'); });
+window.addEventListener('error', function(e){ log('window.onerror: ' + e.message, 'err'); });
+
+/* ---------- отчёт ---------- */
+document.getElementById('bCopy').onclick = function(){
+  var report = [
+    'PiP TEST REPORT',
+    'UA: ' + navigator.userAgent,
+    'Telegram: ' + (tg ? tg.platform + ' v' + tg.version : 'none'),
+    'src: ' + v.currentSrc,
+    '',
+    'CAPS:',
+    document.getElementById('caps').innerText,
+    '',
+    'ENV:',
+    document.getElementById('env').innerText,
+    '',
+    'LOG:',
+    lines.map(function(l){ return l.t + ' ' + l.m; }).join('\n')
+  ].join('\n');
+  var ta = document.getElementById('dump');
+  ta.hidden = false; ta.value = report; ta.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(report).then(function(){ log('отчёт скопирован в буфер','ok'); })
+      .catch(function(){ log('буфер недоступен — текст ниже, выдели вручную'); });
+  } else { log('буфер недоступен — текст ниже, выдели вручную'); }
+};
+document.getElementById('bClear').onclick = function(){
+  lines = []; try { localStorage.removeItem(LOGKEY); } catch(e){}
+  render(); log('--- очищено ---');
+};
+
+})();
+</script>
+</body>
+</html>
