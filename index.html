@@ -66,12 +66,27 @@
   ol{margin:6px 0 0;padding-left:18px;color:var(--hint);font-size:12px}
   ol li{margin-bottom:5px}
   ol b{color:var(--fg)}
+  .verdict{border-radius:10px;padding:11px 12px;font-size:13px;line-height:1.5;
+    border-left:3px solid var(--warn);background:color-mix(in srgb, var(--warn) 12%, transparent)}
+  .verdict.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+  .verdict.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+  .verdict b{display:block;margin-bottom:5px;font-size:14px}
+  .verdict code{font-family:ui-monospace,Menlo,monospace;font-size:12px;
+    background:rgba(127,127,127,.18);padding:1px 4px;border-radius:4px}
 </style>
 </head>
 <body>
 
 <h1>Picture-in-Picture — проверка</h1>
 <p class="sub">Тест: можно ли из Telegram Mini App включить PiP на iPhone.</p>
+
+<div class="card">
+  <h2>Где мы запущены</h2>
+  <div class="verdict" id="verdict"><b>Определяю…</b></div>
+  <button class="ghost wide" id="bOpenBrowser" style="margin-top:10px;display:none">
+    Открыть эту же страницу во встроенном браузере →
+  </button>
+</div>
 
 <div class="card">
   <div class="seg" id="srcSeg"></div>
@@ -170,6 +185,68 @@ if (inTelegram) {
   log('Telegram.WebApp НЕ обнаружен — страница открыта вне Telegram.', 'err');
 }
 
+/* ---------- детектор скрипта, который Telegram впрыскивает в каждый вебвью ----------
+   Telegram-iOS вешает MutationObserver и принудительно проставляет playsinline
+   каждому <video> (submodules/WebUI/Sources/WebAppWebView.swift, videoSource).
+   Ловим это: создаём video без playsinline и смотрим, появится ли атрибут. */
+var tgHook = null;
+function detectTgVideoHook(done){
+  try {
+    var probe = document.createElement('video');
+    probe.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;opacity:0';
+    document.body.appendChild(probe);
+    setTimeout(function(){
+      var hooked = probe.hasAttribute('playsinline');
+      if (probe.parentNode) probe.parentNode.removeChild(probe);
+      done(hooked);
+    }, 400);
+  } catch(e){ done('error: ' + e.name); }
+}
+
+function verdict(){
+  var el = document.getElementById('verdict');
+  var btn = document.getElementById('bOpenBrowser');
+  var html, cls;
+
+  if (inTelegram) {
+    cls = 'bad';
+    html = '<b>Telegram Mini App' + (tg ? ' · ' + tg.platform : '') + '</b>' +
+      'В Mini App на iOS PiP выключен на нативном уровне: Telegram ставит ' +
+      '<code>allowsPictureInPictureMediaPlayback = false</code> в конфигурации WKWebView. ' +
+      'Из JavaScript это не обходится. Ожидаемый результат теста — <b style="display:inline">не работает</b>.';
+    if (tg && tg.openLink) btn.style.display = '';
+  } else if (tgHook === true) {
+    cls = 'ok';
+    html = '<b>Встроенный браузер Telegram</b>' +
+      'Здесь Telegram флаг PiP не трогает — он остаётся в значении по умолчанию ' +
+      '<code>true</code>. PiP тут должен работать. Если работает — разница между ' +
+      'браузером и Mini App доказана.';
+  } else if (tgHook === false) {
+    cls = 'ok';
+    html = '<b>Обычный браузер (не Telegram)</b>' +
+      'Контрольный замер. Здесь PiP должен работать штатно — с этим и сравнивай.';
+  } else {
+    cls = '';
+    html = '<b>Контекст не определён</b>Проверка инъекции Telegram: ' + String(tgHook);
+  }
+  el.className = 'verdict ' + cls;
+  el.innerHTML = html;
+}
+
+document.getElementById('bOpenBrowser').onclick = function(){
+  try { tg.openLink(location.href.split('#')[0] + '#browser'); log('tg.openLink() вызван'); }
+  catch(e){ fail('tg.openLink()', e); }
+};
+
+verdict();
+setTimeout(function(){
+  detectTgVideoHook(function(r){
+    tgHook = r;
+    log('инъекция Telegram (принудительный playsinline на <video>): ' + r);
+    verdict(); caps();
+  });
+}, 600);
+
 /* ---------- источники ---------- */
 var SOURCES = [
   { name:'MP4',        url:'https://vjs.zencdn.net/v/oceans.mp4' },
@@ -235,6 +312,7 @@ function caps(){
     row('MediaSource (MSE)', yn(typeof window.MediaSource !== 'undefined')),
     row('ManagedMediaSource', yn(typeof window.ManagedMediaSource !== 'undefined')),
     row('в iframe', yn(window.self !== window.top)),
+    row('Telegram навязывает playsinline', yn(tgHook === null ? 'проверяю…' : tgHook)),
     row('videoWidth × videoHeight', yn(v.videoWidth + '×' + v.videoHeight)),
     row('readyState', yn(v.readyState)),
     row('paused / muted', yn(v.paused + ' / ' + v.muted))

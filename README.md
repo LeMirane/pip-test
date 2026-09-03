@@ -4,6 +4,29 @@
 
 Всё в одном файле — `index.html`. Никакой сборки, никаких зависимостей.
 
+## Ответ на гипотезу (из исходников Telegram-iOS)
+
+**Нет — из Telegram Mini App на iPhone PiP не включить. Он выключен намеренно, на нативном уровне.**
+
+`submodules/WebUI/Sources/WebAppWebView.swift` — вебвью, в котором работают Mini App:
+
+```swift
+configuration.allowsInlineMediaPlayback = true
+configuration.allowsPictureInPictureMediaPlayback = false   // ← вот оно
+```
+
+Это флаг `WKWebViewConfiguration`. Он гасит PiP в самом WebKit, до того как до дела дойдёт JavaScript. `requestPictureInPicture()` и `webkitSetPresentationMode()` из страницы обойти его не могут — обходить нечего, API просто не подключён к нативному `AVPictureInPictureController`.
+
+Вторая дверь закрыта отдельно. В каждый Mini App Telegram впрыскивает user script (там же, `videoSource`), который вешает `MutationObserver` и принудительно проставляет `playsinline` **каждому** `<video>` — существующему и любому будущему. То есть нативный полноэкранный плеер, в котором живёт системная кнопка PiP, тоже не открыть.
+
+### Но: встроенный браузер Telegram — другой вебвью
+
+`submodules/BrowserUI/Sources/BrowserWebContent.swift` конфигурируется отдельно и `allowsPictureInPictureMediaPlayback` **не трогает вообще** — значит флаг остаётся в дефолтном `true`. Инъекцию `playsinline` он делает ту же самую, а вот PiP-API там живой.
+
+Практический вывод: если PiP нужен — уводи воспроизведение из Mini App во встроенный браузер (`Telegram.WebApp.openLink()`) или в Safari. Внутри самого Mini App вариантов нет.
+
+Страница определяет свой контекст сама: пробует создать `<video>` без `playsinline` и смотрит, проставит ли его обсервер Telegram. По этому признаку + `Telegram.WebApp.platform` она различает Mini App, встроенный браузер и обычный Safari.
+
 ## Что страница проверяет
 
 Три независимых пути к PiP — страница даёт нажать каждый и показывает точную ошибку, если путь закрыт:
