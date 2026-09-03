@@ -25,6 +25,20 @@ configuration.allowsPictureInPictureMediaPlayback = false   // ← вот оно
 
 Практический вывод: если PiP нужен — уводи воспроизведение из Mini App во встроенный браузер (`Telegram.WebApp.openLink()`) или в Safari. Внутри самого Mini App вариантов нет.
 
+### Ловушка в диагностике
+
+`document.pictureInPictureEnabled` внутри Mini App вернёт **`true`** — и соврёт. Это глобальный флаг платформы (`WebProcessCreationParameters.supportsPictureInPicture`), он не связан с `allowsPictureInPictureMediaPlayback` и ничего не знает о конкретном вебвью.
+
+Честный сигнал ровно один:
+
+```js
+video.webkitSupportsPresentationMode('picture-in-picture')
+```
+
+И опрашивать его надо **после `loadedmetadata`**: пока у элемента нет `MediaPlayer`, он безусловно возвращает `false`. Опрос сразу после загрузки страницы — самый частый источник ложного отрицания. Страница это учитывает и перепроверяет по событию.
+
+Ожидаемая ошибка в Mini App — `NotSupportedError`, а не `NotAllowedError`. Первое значит «API отключён в вебвью», второе — «не было пользовательского жеста». Диагнозы разные.
+
 Страница определяет свой контекст сама: пробует создать `<video>` без `playsinline` и смотрит, проставит ли его обсервер Telegram. По этому признаку + `Telegram.WebApp.platform` она различает Mini App, встроенный браузер и обычный Safari.
 
 ## Что страница проверяет
@@ -41,6 +55,34 @@ configuration.allowsPictureInPictureMediaPlayback = false   // ← вот оно
 Плюс: таблица фактической поддержки API в вебвью, окружение (`platform`, `version` из `Telegram.WebApp`, UA), и лог всех медиа-событий (`webkitpresentationmodechanged`, `enterpictureinpicture`, `webkitbeginfullscreen`, …).
 
 Лог пишется в `localStorage` — он переживает перезагрузку вебвью после того, как ты свернёшь Telegram. Это важно: именно так проверяется, продолжается ли PiP в фоне.
+
+## Три пути отдать видео из бота — и что из них даёт PiP
+
+| | Как бот отдаёт | Куда попадает пользователь | PiP |
+|---|---|---|---|
+| 1 | inline-кнопка с `url` | встроенный браузер Telegram | **работает** |
+| 2 | inline-кнопка с `web_app`, menu button, `t.me/bot/app` | вебвью Mini App | **выключен намеренно** |
+| 3 | `sendVideo` | родной плеер Telegram | **работает, нативный** |
+
+Путь 3 — самый крепкий: это не веб вообще. Telegram проигрывает файл своим плеером через `AVPictureInPictureController` (`submodules/GalleryUI/Sources/Items/UniversalVideoGalleryItem.swift`), у приложения в Info.plist есть `UIBackgroundModes: audio`, поэтому окошко переживает сворачивание Telegram и висит поверх других приложений. Ограничение: бот отдаёт по URL файлы до 20 МБ, загрузкой напрямую — до 50 МБ.
+
+Путь 1 — если нужен именно свой веб-плеер. Путь 2 — тупик.
+
+## Бот-стенд
+
+`bot.py` показывает все три пути одним сообщением. Зависимостей нет, только стандартная библиотека.
+
+```bash
+BOT_TOKEN=<токен_от_BotFather> python3 bot.py
+```
+
+Токен читается из переменной окружения — в файлы и в git он не попадает. Дальше в Telegram: `/start` у своего бота, и три кнопки для сравнения.
+
+Подменить страницу или ролик, не трогая код:
+
+```bash
+BOT_TOKEN=<токен> PAGE_URL=https://example.com/ VIDEO_URL=https://example.com/v.mp4 python3 bot.py
+```
 
 ## Как запустить
 

@@ -111,6 +111,8 @@
     <li><b>1</b> — PiP на iOS требует, чтобы видео уже играло.</li>
     <li><b>2a/2b</b> — прямой вызов API. Если сработало — гипотеза подтверждена.</li>
     <li><b>3a</b> — если прямой вызов не даёт PiP: войди в полноэкранный режим, там появится <b>нативная кнопка PiP</b> (прямоугольник со стрелкой). Это второй путь.</li>
+    <li>Ожидаемая ошибка в Mini App — <b>NotSupportedError</b> (API отключён в вебвью),
+        а не NotAllowedError (нет жеста). Это разные диагнозы.</li>
     <li><b>3a → свернуть Telegram</b> — если в iOS включено «Автозапуск Картинки в картинке», видео может само уйти в PiP. Третий путь.</li>
   </ol>
 </div>
@@ -169,6 +171,8 @@ function render(){
 function esc(s){ return s.replace(/[&<>]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]; }); }
 render();
 log('--- сессия открыта ---');
+var ctx = (location.search.match(/[?&]ctx=([a-z]+)/) || [])[1];
+if (ctx) log('точка входа: ' + ctx);
 
 /* ---------- Telegram ---------- */
 var tgApi = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
@@ -298,11 +302,13 @@ function caps(){
   } catch(e){ wkSupports = 'throw: ' + e.name; }
 
   var rows = [
-    row('document.pictureInPictureEnabled', yn(document.pictureInPictureEnabled === true)),
+    row('document.pictureInPictureEnabled <span style="color:var(--warn)">⚠ врёт</span>',
+        yn(document.pictureInPictureEnabled === true)),
     row('video.requestPictureInPicture', yn(typeof v.requestPictureInPicture === 'function')),
     row('video.disablePictureInPicture', yn(v.disablePictureInPicture === true)),
     row('document.pictureInPictureElement', yn(document.pictureInPictureElement ? 'есть' : 'нет')),
-    row('webkitSupportsPresentationMode(pip)', yn(wkSupports)),
+    row('<b style="color:var(--fg)">webkitSupportsPresentationMode(pip)</b><br>'
+        + '<span style="font-size:11px">← единственный честный сигнал</span>', yn(wkSupports)),
     row('webkitSetPresentationMode', yn(typeof v.webkitSetPresentationMode === 'function')),
     row('video.webkitPresentationMode', yn(v.webkitPresentationMode || 'undefined')),
     row('video.webkitEnterFullscreen', yn(typeof v.webkitEnterFullscreen === 'function')),
@@ -431,6 +437,9 @@ v.addEventListener('webkitpresentationmodechanged', function(){
   v.addEventListener(ev, function(){
     if (ev === 'error') log('event: error → ' + (v.error ? 'code ' + v.error.code + ' ' + v.error.message : '?'), 'err');
     else log('event: ' + ev);
+    // до loadedmetadata у элемента нет MediaPlayer и webkitSupportsPresentationMode
+    // безусловно возвращает false — опрашиваем только после него
+    if (ev === 'loadedmetadata' || ev === 'play') caps();
   });
 });
 document.addEventListener('visibilitychange', function(){
